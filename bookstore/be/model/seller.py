@@ -1,7 +1,12 @@
-import sqlite3 as sqlite
+# import sys
+# sys.path.append(r'D:\2024.2\DB\Task2\CDMS.Xuan_ZHOU.2024Fall.DaSE\project1\bookstore')
+
 from be.model import error
 from be.model import db_conn
-
+import json
+from sqlalchemy.exc import SQLAlchemyError
+from pymongo.errors import PyMongoError
+from sqlalchemy.sql import text
 
 class Seller(db_conn.DBConn):
     def __init__(self):
@@ -20,21 +25,87 @@ class Seller(db_conn.DBConn):
                 return error.error_non_exist_user_id(user_id)
             if not self.store_id_exist(store_id):
                 return error.error_non_exist_store_id(store_id)
-            if self.book_id_exist(store_id, book_id):
+            if self.store_book_id_exist(store_id, book_id):
                 return error.error_exist_book_id(book_id)
 
-            self.conn.execute(
-                "INSERT into store(store_id, book_id, book_info, stock_level)"
-                "VALUES (?, ?, ?, ?)",
-                (store_id, book_id, book_json_str, stock_level),
-            )
-            self.conn.commit()
-        except sqlite.Error as e:
+            # 尝试从 PostgreSQL 的 book 表中查找书籍
+            cursor = self.conn.execute(text("SELECT * FROM book WHERE id = :book_id;"), {"book_id": book_id})
+            row = cursor.fetchone()
+
+            if row:  # 如果书籍已存在于 book 表
+                # 提取书籍的价格
+                price = row[8]  # Assuming 'price' is at index 8 in the book table
+
+                # 插入书籍信息到 store_book 表
+                self.conn.execute(
+                    text("INSERT INTO store_book (store_id, book_id, stock_level, price) "
+                        "VALUES (:store_id, :book_id, :stock_level, :price);"),
+                    { "store_id": store_id, "book_id": book_id, "stock_level": stock_level, "price": price }
+                )
+
+                self.conn.commit()
+
+            else:  # 如果书籍不存在于 book 表
+                # 解析传入的 JSON 格式的书籍信息
+                book_info_json = json.loads(book_json_str)
+                # 提取价格
+                price = book_info_json.get("price")
+                
+                # 将书籍信息插入到 PostgreSQL 的 book 表
+                self.conn.execute(
+                    text("INSERT INTO book (id, title, author, publisher, original_title, translator, pub_year, "
+                        "pages, price, currency_unit, binding, isbn, tags) "
+                        "VALUES (:id, :title, :author, :publisher, :original_title, :translator, :pub_year, :pages, "
+                        ":price, :currency_unit, :binding, :isbn, :tags);"),
+                    {
+                        "id": book_info_json["id"],
+                        "title": book_info_json["title"],
+                        "author": book_info_json["author"],
+                        "publisher": book_info_json["publisher"],
+                        "original_title": book_info_json.get("original_title", ""),
+                        "translator": book_info_json.get("translator", ""),
+                        "pub_year": book_info_json.get("pub_year", ""),
+                        "pages": book_info_json.get("pages", 0),
+                        "price": price,
+                        "currency_unit": book_info_json.get("currency_unit", ""),
+                        "binding": book_info_json.get("binding", ""),
+                        "isbn": book_info_json.get("isbn", ""),
+                        "tags": book_info_json.get("tags", "")
+                    }
+                )
+
+                # 将书籍的详细信息插入 MongoDB 的 book_details 数据集合
+                book_details = {
+                    "book_id": book_id,
+                    "author_intro": book_info_json.get("author_intro", ""),
+                    "book_intro": book_info_json.get("book_intro", ""),
+                    "content": book_info_json.get("content", ""),
+                    "pictures": book_info_json.get("picture", None)  # Assuming it's in BLOB format
+                }
+                self.mongo['bookstore']['book_details'].insert_one(book_details)
+
+
+                self.conn.commit()
+
+                # 将书籍信息插入到 store_book 表
+                self.conn.execute(
+                    text("INSERT INTO store_book (store_id, book_id, stock_level, price) "
+                        "VALUES (:store_id, :book_id, :stock_level, :price);"),
+                    { "store_id": store_id, "book_id": book_id, "stock_level": stock_level, "price": price }
+                )
+
+                self.conn.commit()
+
+        except SQLAlchemyError as e:
             return 528, "{}".format(str(e))
+        except PyMongoError as e:
+            return 529, "{}".format(str(e))
         except BaseException as e:
             return 530, "{}".format(str(e))
         return 200, "ok"
 
+    '''
+    #增加库存
     def add_stock_level(
         self, user_id: str, store_id: str, book_id: str, add_stock_level: int
     ):
@@ -43,18 +114,40 @@ class Seller(db_conn.DBConn):
                 return error.error_non_exist_user_id(user_id)
             if not self.store_id_exist(store_id):
                 return error.error_non_exist_store_id(store_id)
-            if not self.book_id_exist(store_id, book_id):
+            if not self.store_book_id_exist(store_id, book_id):
                 return error.error_non_exist_book_id(book_id)
 
             self.conn.execute(
-                "UPDATE store SET stock_level = stock_level + ? "
-                "WHERE store_id = ? AND book_id = ?",
-                (add_stock_level, store_id, book_id),
+                text("UPDATE store_book SET stock_level = stock_level + :add_stock_level "
+                    "WHERE store_id = :store_id AND book_id = :book_id"),
+                {"add_stock_level": add_stock_level, "store_id": store_id, "book_id": book_id},
             )
+
             self.conn.commit()
-        except sqlite.Error as e:
+        
+        except SQLAlchemyError as e:
             return 528, "{}".format(str(e))
         except BaseException as e:
+            return 530, "{}".format(str(e))
+        return 200, "ok"
+    '''
+    def add_stock_level(self, user_id: str, store_id: str, book_id: str, add_stock_level: int):
+        try:
+            if not self.user_id_exist(user_id):
+                return error.error_non_exist_user_id(user_id)
+            if not self.store_id_exist(store_id):
+                return error.error_non_exist_store_id(store_id)
+            if not self.store_book_id_exist(store_id, book_id):
+                return error.error_non_exist_book_id(book_id)
+
+            self.conn.execute(text("UPDATE store_book SET stock_level = stock_level + :asl  WHERE store_id = :sid AND book_id = :bid"),
+                              {'asl':add_stock_level, 'sid':store_id, 'bid':book_id})
+            self.conn.commit()
+        except SQLAlchemyError as e:
+            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
+            return 528, "{}".format(str(e))
+        except BaseException as e:
+            print(f"BaseException occurred: {str(e)}")  # For debugging
             return 530, "{}".format(str(e))
         return 200, "ok"
 
@@ -64,13 +157,25 @@ class Seller(db_conn.DBConn):
                 return error.error_non_exist_user_id(user_id)
             if self.store_id_exist(store_id):
                 return error.error_exist_store_id(store_id)
-            self.conn.execute(
-                "INSERT into user_store(store_id, user_id)" "VALUES (?, ?)",
-                (store_id, user_id),
-            )
+            
+            self.conn.execute(text("INSERT into user_store (store_id, user_id) VALUES (:sid, :uid)"), {'sid':store_id, 'uid':user_id})
             self.conn.commit()
-        except sqlite.Error as e:
+        except SQLAlchemyError as e:
+            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
             return 528, "{}".format(str(e))
         except BaseException as e:
+            # print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
             return 530, "{}".format(str(e))
+
         return 200, "ok"
+
+if __name__ == "__main__":
+
+    from be.model import error
+    from be.model import db_conn
+
+    user_id = "test_add_books_seller_id_285627a8-af1b-11ef-b378-dc1ba18df2a6"
+    store_id = "test_add_books_store_id_285627a9-af1b-11ef-9b6b-dc1ba18df2a6"
+    s = Seller()
+    code, str = s.create_store(user_id, store_id)
+    print(code, str)
