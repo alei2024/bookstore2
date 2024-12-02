@@ -7,7 +7,7 @@ from pymongo.errors import PyMongoError
 from sqlalchemy.sql import text
 from be.model.times import add_unpaid_order, delete_unpaid_order, check_order_time, get_time_stamp
 #from be.model.order import Order
-#from be.model.nlp import encrypt
+from be.model.encrypt import encrypt
 
 class Buyer(db_conn.DBConn):
     def __init__(self):
@@ -88,7 +88,6 @@ class Buyer(db_conn.DBConn):
     def payment(self, user_id: str, password: str, order_id: str) -> (int, str):
         conn = self.conn
         try:
-            print("\n00000000000000\n")
             cursor = conn.execute(text("SELECT * FROM orders WHERE order_id = :order_id"),
                                   {"order_id": order_id})
             row = cursor.fetchone()
@@ -102,7 +101,6 @@ class Buyer(db_conn.DBConn):
             order_time = row[5]
             status = row[3]
 
-            print("\n11111111111111111\n")
 
             if buyer_id != user_id:
                 return error.error_authorization_fail()
@@ -116,15 +114,14 @@ class Buyer(db_conn.DBConn):
                 o.cancel_order(order_id)
                 return error.error_invalid_order_id()
             '''
-            print("\n222222222222\n")
             cursor = conn.execute(text("SELECT balance, password FROM users WHERE user_id = :buyer_id;"),
                                   {"buyer_id": buyer_id})
             row = cursor.fetchone()
             if row is None:
                 return error.error_non_exist_user_id(buyer_id)
             balance = row[0]
-            #if encrypt(password) != row[1]:
-            if password != row[1]:
+            if encrypt(password) != row[1]:
+            #if password != row[1]:
                 return error.error_authorization_fail()
             if balance < total_price:
                 return error.error_not_sufficient_funds(order_id)
@@ -187,8 +184,8 @@ class Buyer(db_conn.DBConn):
             if row is None:
                 return error.error_authorization_fail()
 
-            #if row[0] != encrypt(password):
-            if row[0] != password:
+            if row[0] != encrypt(password):
+            #if row[0] != password:
                 return error.error_authorization_fail()
 
             cursor = self.conn.execute(

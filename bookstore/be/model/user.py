@@ -5,8 +5,9 @@ from be.model import error
 from be.model import db_conn
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from pymongo.errors import PyMongoError
-#from be.model.nlp import encrypt
+from be.model.encrypt import encrypt
 from sqlalchemy.sql import text
+
 
 # encode a json string like:
 #   {
@@ -36,6 +37,7 @@ def jwt_decode(encoded_token, user_id: str) -> str:
     return decoded
 
 
+
 class User(db_conn.DBConn):
     token_lifetime: int = 3600  # 3600 second
 
@@ -61,8 +63,8 @@ class User(db_conn.DBConn):
         try:
             terminal = "terminal_{}".format(str(time.time()))
             token = jwt_encode(user_id, terminal)
-            
-            #password = encrypt(password)
+            ##########################
+            password = encrypt(password)
 
             self.conn.execute(
                 text("INSERT into users(user_id, password, balance, token, terminal) "
@@ -89,9 +91,9 @@ class User(db_conn.DBConn):
         row = cursor.fetchone()
         if row is None:
             return error.error_authorization_fail()
-
-        #if encrypt(password) != row[0]:
-        if password != row[0]:
+        ##############
+        if encrypt(password) != row[0]:
+        #if password != row[0]:
             return error.error_authorization_fail()
 
         return 200, "ok"
@@ -162,7 +164,8 @@ class User(db_conn.DBConn):
 
             terminal = "terminal_{}".format(str(time.time()))
             token = jwt_encode(user_id, terminal)
-            #new_password = encrypt(new_password)
+            ####################################
+            new_password = encrypt(new_password)
             cursor = self.conn.execute(text(
                 "UPDATE users set password = :pw, token= :tok, terminal = :ter where user_id = :uid"),
                 {'pw':new_password, 'tok':token, 'ter':terminal, 'uid':user_id})
