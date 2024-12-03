@@ -7,6 +7,7 @@ import json
 from sqlalchemy.exc import SQLAlchemyError
 from pymongo.errors import PyMongoError
 from sqlalchemy.sql import text
+from be.model.times import get_time_stamp
 
 class Seller(db_conn.DBConn):
     def __init__(self):
@@ -185,10 +186,11 @@ class Seller(db_conn.DBConn):
                 return error.error_invalid_order_status(order_id)
 
             self.conn.execute(text(
-                "UPDATE orders set status=3 where order_id = :order_id ;") , {"order_id":order_id})
+                "UPDATE orders set status=3, shipped_at = :current_time where order_id = :order_id ;") , {"order_id":order_id, "current_time": get_time_stamp()})
             self.conn.commit()
         except SQLAlchemyError as e:
             return 528, "{}".format(str(e))
         except BaseException as e:
             return 530, "{}".format(str(e))
         return 200, "ok"
+    

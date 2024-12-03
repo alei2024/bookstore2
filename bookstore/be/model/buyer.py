@@ -5,7 +5,7 @@ from be.model import error
 from sqlalchemy.exc import SQLAlchemyError
 from pymongo.errors import PyMongoError
 from sqlalchemy.sql import text
-from be.model.times import add_unpaid_order, delete_unpaid_order, check_order_time, get_time_stamp
+from be.model.times import get_time_stamp
 #from be.model.order import Order
 from be.model.encrypt import encrypt
 
@@ -33,7 +33,6 @@ class Buyer(db_conn.DBConn):
                 ),
                 {"uid": uid, "store_id": store_id, "user_id": user_id, "total_price": 0, "created_at": get_time_stamp()}
             )
-            print("\n5555555555555\n")
             for book_id, count in id_and_count:
                 # 使用 text() 包裹 SQL 查询
                 cursor = self.conn.execute(
@@ -201,8 +200,65 @@ class Buyer(db_conn.DBConn):
             return 530, "{}".format(str(e))
 
         return 200, "ok"
-
+    
    
+    # 手动收货,修改订单状态，增加卖家收入
+    def receive_books(self, user_id: str, password: str, order_id: str) -> (int, str):
+        try:
+            if not self.user_id_exist(user_id):
+                return error.error_non_exist_user_id(user_id)
+            if not self.order_id_exist(order_id):  
+                return error.error_invalid_order_id(order_id)
+
+            cursor = self.conn.execute(text("SELECT order_id, user_id, store_id, total_price, status FROM orders WHERE order_id = :order_id"),
+                                    {"order_id": order_id, })
+            row = cursor.fetchone()
+           
+            if row is None:
+                return error.error_invalid_order_id(order_id)
+
+            order_id = row[0]
+            buyer_id = row[1]
+            store_id = row[2]
+            total_price = row[3]  # 总价
+            status = row[4]
+            
+            if buyer_id != user_id:
+                return error.error_authorization_fail()
+            if status != 3:
+                return error.error_invalid_order_status(order_id)
+        
+            cursor = self.conn.execute(text("SELECT store_id, user_id FROM user_store WHERE store_id = :store_id;"),
+                                    {"store_id": store_id, })
+            row = cursor.fetchone()
+            if row is None:
+                return error.error_non_exist_store_id(store_id)
+
+            seller_id = row[1]
+
+            if not self.user_id_exist(seller_id):
+                return error.error_non_exist_user_id(seller_id)
+
+            cursor = self.conn.execute(text("UPDATE users set balance = balance + :total_price "
+                                    "WHERE user_id = :seller_id"),
+                                    {"total_price": total_price, "seller_id": seller_id})
+           
+            if cursor.rowcount == 0:
+                return error.error_non_exist_user_id(buyer_id)
+
+            self.conn.execute(
+                text("UPDATE orders SET status = 4, received_at = :current_time WHERE order_id = :order_id;"),
+                {"order_id": order_id, "current_time": get_time_stamp()}
+            )
+
+            self.conn.commit()
+        except SQLAlchemyError as e:
+            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
+            return 528, "{}".format(str(e))
+        except BaseException as e:
+            return 530, "{}".format(str(e))
+        return 200, "ok"
+
 
 '''
 class Buyer(db_conn.DBConn):
