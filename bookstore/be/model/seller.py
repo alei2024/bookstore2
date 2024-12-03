@@ -169,13 +169,26 @@ class Seller(db_conn.DBConn):
 
         return 200, "ok"
 
-if __name__ == "__main__":
+    # 卖家发货
+    def send_books(self,store_id,order_id):
+        try:
+            if not self.store_id_exist(store_id):
+                return error.error_non_exist_store_id(store_id)
+            if not self.order_id_exist(order_id):   #增加order_id不存在的错误处理
+                return error.error_invalid_order_id(order_id)
+            
+            cursor = self.conn.execute(text(
+                "SELECT status FROM orders where order_id = :order_id") ,{"order_id":order_id})
+            row = cursor.fetchone()
+            status = row[0]
+            if status != 2:
+                return error.error_invalid_order_status(order_id)
 
-    from be.model import error
-    from be.model import db_conn
-
-    user_id = "test_add_books_seller_id_285627a8-af1b-11ef-b378-dc1ba18df2a6"
-    store_id = "test_add_books_store_id_285627a9-af1b-11ef-9b6b-dc1ba18df2a6"
-    s = Seller()
-    code, str = s.create_store(user_id, store_id)
-    print(code, str)
+            self.conn.execute(text(
+                "UPDATE orders set status=3 where order_id = :order_id ;") , {"order_id":order_id})
+            self.conn.commit()
+        except SQLAlchemyError as e:
+            return 528, "{}".format(str(e))
+        except BaseException as e:
+            return 530, "{}".format(str(e))
+        return 200, "ok"
