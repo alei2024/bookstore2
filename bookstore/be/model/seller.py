@@ -105,33 +105,7 @@ class Seller(db_conn.DBConn):
             return 530, "{}".format(str(e))
         return 200, "ok"
 
-    '''
-    #增加库存
-    def add_stock_level(
-        self, user_id: str, store_id: str, book_id: str, add_stock_level: int
-    ):
-        try:
-            if not self.user_id_exist(user_id):
-                return error.error_non_exist_user_id(user_id)
-            if not self.store_id_exist(store_id):
-                return error.error_non_exist_store_id(store_id)
-            if not self.store_book_id_exist(store_id, book_id):
-                return error.error_non_exist_book_id(book_id)
-
-            self.conn.execute(
-                text("UPDATE store_book SET stock_level = stock_level + :add_stock_level "
-                    "WHERE store_id = :store_id AND book_id = :book_id"),
-                {"add_stock_level": add_stock_level, "store_id": store_id, "book_id": book_id},
-            )
-
-            self.conn.commit()
-        
-        except SQLAlchemyError as e:
-            return 528, "{}".format(str(e))
-        except BaseException as e:
-            return 530, "{}".format(str(e))
-        return 200, "ok"
-    '''
+ 
     def add_stock_level(self, user_id: str, store_id: str, book_id: str, add_stock_level: int):
         try:
             if not self.user_id_exist(user_id):

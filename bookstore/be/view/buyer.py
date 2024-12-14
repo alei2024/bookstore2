@@ -43,11 +43,31 @@ def add_funds():
 
 # 收货
 @bp_buyer.route("/receive_books", methods=["POST"])
-def send_books():
+def receive_books():
     user_id: str = request.json.get("user_id")
     order_id: str = request.json.get("order_id")
     password: str = request.json.get("password")
     b = Buyer()
     code, message = b.receive_books(user_id, password, order_id)
 
+    return jsonify({"message": message}), code
+
+
+
+# 用户主动取消订单路由
+@bp_buyer.route("/user_cancel_order", methods=["POST"])
+def user_cancel_order():
+    user_id = request.json.get("user_id")
+    order_id = request.json.get("order_id")
+    b = Buyer()
+    code, message = b.user_cancel_order(user_id, order_id)
+    return jsonify({"message": message}), code
+
+# 自动取消订单路由
+@bp_buyer.route("/auto_cancel_order", methods=["POST"])
+def auto_cancel_order():
+    user_id = request.json.get("user_id")
+    order_id = request.json.get("order_id")
+    b = Buyer()
+    code, message = b.auto_cancel_order(user_id, order_id)
     return jsonify({"message": message}), code
