@@ -171,7 +171,7 @@ class Buyer(db_conn.DBConn):
 
         return 200, "ok"
     
-   # 买家充值 
+    # 买家充值 
     def add_funds(self, user_id, password, add_value) -> (int, str):  
         try:
             cursor = self.conn.execute(text("SELECT password from users where user_id = :user_id"), {"user_id": user_id})
@@ -341,230 +341,124 @@ class Buyer(db_conn.DBConn):
         except BaseException as e:
             return 530, "{}".format(str(e))
 
-    '''
-    def auto_cancel_order(self, user_id: str, order_id: str) -> (int, str):
+
+    #查看历史订单
+    def get_orders(self, user_id: str) -> (int, list):
         try:
             # 检查用户是否存在
             if not self.user_id_exist(user_id):
                 return error.error_non_exist_user_id(user_id)
-            if not self.order_id_exist(order_id):
-                return error.error_invalid_order_id(order_id)
 
-            cursor = self.conn.execute(text("SELECT status,store_id,created_at FROM orders WHERE order_id = :order_id;"),
-                                       {"order_id": order_id, })
-            row = cursor.fetchone()
-            if row[0] != 1:  #错误状态的订单不能被取消
-                return error.error_invalid_order_status(order_id)
-            
-            # 检查订单创建时间是否超过30分钟
-            created_at = row[2]
-            created_at = datetime.fromtimestamp(created_at, timezone.utc)# 将时间戳转为datetime对象
+            # 查询用户的所有历史订单，状态为 0 或 4
+            result = self.conn.execute(text(
+                "SELECT order_id FROM orders WHERE user_id = :user_id AND status IN (0, 4);"
+            ), {"user_id": user_id}).fetchall()
 
+            # 提取订单号
+            order_list = [order[0] for order in result]
 
-            # 如果订单创建时间超过30分钟，则自动取消订单
-            #current_time = datetime.utcnow()
-            current_time = datetime.now(timezone.utc)  # 获取当前 UTC 时间
-            if current_time - created_at > timedelta(minutes=30):
-                # 更新订单状态为 "cancelled"
-                self.conn.execute(text(
-                 "UPDATE orders set status=0 where order_id = :order_id ;"), {"order_id":order_id})
-                self.conn.commit()
-
-                return 200, "auto cancelled successfully"
-            else:
-                return 403, "created time less than limit"
+            # 返回状态码和订单号列表
+            return 200, order_list       
 
         except SQLAlchemyError as e:
             return 528, "{}".format(str(e))
         except BaseException as e:
             return 530, "{}".format(str(e))
+
+        
+    
     '''
-
-
-
-
-
-
-'''
-class Buyer(db_conn.DBConn):
-    def __init__(self):
-        db_conn.DBConn.__init__(self)
-
-    def new_order(
-        self, user_id: str, store_id: str, id_and_count: [(str, int)]
-    ) -> (int, str, str):
-        order_id = ""
+    def search_in_store(self, store_id, search_key, page=0):
         try:
-            if not self.user_id_exist(user_id):
-                return error.error_non_exist_user_id(user_id) + (order_id,)
             if not self.store_id_exist(store_id):
-                return error.error_non_exist_store_id(store_id) + (order_id,)
-            uid = "{}_{}_{}".format(user_id, store_id, str(uuid.uuid1()))
-
-            for book_id, count in id_and_count:
-                cursor = self.conn.execute(
-                    "SELECT book_id, stock_level, book_info FROM store "
-                    "WHERE store_id = ? AND book_id = ?;",
-                    (store_id, book_id),
-                )
-                row = cursor.fetchone()
-                if row is None:
-                    return error.error_non_exist_book_id(book_id) + (order_id,)
-
-                stock_level = row[1]
-                book_info = row[2]
-                book_info_json = json.loads(book_info)
-                price = book_info_json.get("price")
-
-                if stock_level < count:
-                    return error.error_stock_level_low(book_id) + (order_id,)
-
-                cursor = self.conn.execute(
-                    "UPDATE store set stock_level = stock_level - ? "
-                    "WHERE store_id = ? and book_id = ? and stock_level >= ?; ",
-                    (count, store_id, book_id, count),
-                )
-                if cursor.rowcount == 0:
-                    return error.error_stock_level_low(book_id) + (order_id,)
-
-                self.conn.execute(
-                    "INSERT INTO new_order_detail(order_id, book_id, count, price) "
-                    "VALUES(?, ?, ?, ?);",
-                    (uid, book_id, count, price),
-                )
-
-            self.conn.execute(
-                "INSERT INTO new_order(order_id, store_id, user_id) "
-                "VALUES(?, ?, ?);",
-                (uid, store_id, user_id),
-            )
-            self.conn.commit()
-            order_id = uid
-        except sqlite.Error as e:
-            logging.info("528, {}".format(str(e)))
-            return 528, "{}".format(str(e)), ""
-        except BaseException as e:
-            logging.info("530, {}".format(str(e)))
-            return 530, "{}".format(str(e)), ""
-
-        return 200, "ok", order_id
-
-    def payment(self, user_id: str, password: str, order_id: str) -> (int, str):
-        conn = self.conn
-        try:
-            cursor = conn.execute(
-                "SELECT order_id, user_id, store_id FROM new_order WHERE order_id = ?",
-                (order_id,),
-            )
-            row = cursor.fetchone()
-            if row is None:
-                return error.error_invalid_order_id(order_id)
-
-            order_id = row[0]
-            buyer_id = row[1]
-            store_id = row[2]
-
-            if buyer_id != user_id:
-                return error.error_authorization_fail()
-
-            cursor = conn.execute(
-                "SELECT balance, password FROM user WHERE user_id = ?;", (buyer_id,)
-            )
-            row = cursor.fetchone()
-            if row is None:
-                return error.error_non_exist_user_id(buyer_id)
-            balance = row[0]
-            if password != row[1]:
-                return error.error_authorization_fail()
-
-            cursor = conn.execute(
-                "SELECT store_id, user_id FROM user_store WHERE store_id = ?;",
-                (store_id,),
-            )
-            row = cursor.fetchone()
-            if row is None:
                 return error.error_non_exist_store_id(store_id)
+            if page > 0:
+                page_lower = self.page_size * (page - 1)
+                cursor = self.conn.execute(
+                    "SELECT i.book_id, i.book_title, i.book_author, s.price, s.stock_level "
+                    "from invert_index i, store s "
+                    "where i.search_key = '%s' and i.book_id = s.book_id and s.store_id = '%s' "
+                    "ORDER BY i.search_id limit '%d' offset '%d' ;"
+                    % (search_key, store_id, self.page_size, page_lower))
+            else:
+                cursor = self.conn.execute(
+                    "SELECT i.book_id, i.book_title, i.book_author, s.price, s.stock_level "
+                    "from invert_index i, store s "
+                    "where i.search_key = '%s' and i.book_id = s.book_id and s.store_id = '%s' "
+                    "ORDER BY i.search_id ;"
+                    % (search_key, store_id))
+            rows = cursor.fetchall()
 
-            seller_id = row[1]
-
-            if not self.user_id_exist(seller_id):
-                return error.error_non_exist_user_id(seller_id)
-
-            cursor = conn.execute(
-                "SELECT book_id, count, price FROM new_order_detail WHERE order_id = ?;",
-                (order_id,),
-            )
-            total_price = 0
-            for row in cursor:
-                count = row[1]
-                price = row[2]
-                total_price = total_price + price * count
-
-            if balance < total_price:
-                return error.error_not_sufficient_funds(order_id)
-
-            cursor = conn.execute(
-                "UPDATE user set balance = balance - ?"
-                "WHERE user_id = ? AND balance >= ?",
-                (total_price, buyer_id, total_price),
-            )
-            if cursor.rowcount == 0:
-                return error.error_not_sufficient_funds(order_id)
-
-            cursor = conn.execute(
-                "UPDATE user set balance = balance + ?" "WHERE user_id = ?",
-                (total_price, seller_id),
-            )
-
-            if cursor.rowcount == 0:
-                return error.error_non_exist_user_id(seller_id)
-
-            cursor = conn.execute(
-                "DELETE FROM new_order WHERE order_id = ?", (order_id,)
-            )
-            if cursor.rowcount == 0:
-                return error.error_invalid_order_id(order_id)
-
-            cursor = conn.execute(
-                "DELETE FROM new_order_detail where order_id = ?", (order_id,)
-            )
-            if cursor.rowcount == 0:
-                return error.error_invalid_order_id(order_id)
-
-            conn.commit()
-
-        except sqlite.Error as e:
-            return 528, "{}".format(str(e))
-
-        except BaseException as e:
-            return 530, "{}".format(str(e))
-
-        return 200, "ok"
-
-    def add_funds(self, user_id, password, add_value) -> (int, str):
-        try:
-            cursor = self.conn.execute(
-                "SELECT password  from user where user_id=?", (user_id,)
-            )
-            row = cursor.fetchone()
-            if row is None:
-                return error.error_authorization_fail()
-
-            if row[0] != password:
-                return error.error_authorization_fail()
-
-            cursor = self.conn.execute(
-                "UPDATE user SET balance = balance + ? WHERE user_id = ?",
-                (add_value, user_id),
-            )
-            if cursor.rowcount == 0:
-                return error.error_non_exist_user_id(user_id)
+            result = []
+            for row in rows:
+                book = {
+                    "bid": row[0],
+                    "title": row[1],
+                    "author": row[2],
+                    "price": row[3],
+                    "storage": row[4]
+                }
+                result.append(book)
 
             self.conn.commit()
-        except sqlite.Error as e:
-            return 528, "{}".format(str(e))
+        except SQLAlchemyError as e:
+            return 528, "{}".format(str(e)), []
         except BaseException as e:
-            return 530, "{}".format(str(e))
+            return 530, "{}".format(str(e)), []
+        return 200, "ok", result
 
-        return 200, "ok"
-'''
+    
+    
+    def search(self, search_key, page=0) -> (int, str, list):
+        try:
+            if page > 0:
+                page_lower = self.page_size * (page - 1)
+                cursor = self.conn.execute(
+                    "SELECT book_id, book_title, book_author from invert_index "
+                    "where search_key = '%s' "
+                    "ORDER BY search_id limit '%d' offset '%d';"
+                    % (search_key, self.page_size, page_lower))
+            else:
+                cursor = self.conn.execute(
+                    "SELECT book_id, book_title, book_author from invert_index "
+                    "where search_key = '%s' "
+                    "ORDER BY search_id  ;"
+                    % (search_key))
+            rows = cursor.fetchall()
+
+            result = []
+            for row in rows:
+                book = {
+                    "bid": row[0],
+                    "title": row[1],
+                    "author": row[2]
+                }
+                result.append(book)
+
+            self.conn.commit()
+        except SQLAlchemyError as e:
+            return 528, "{}".format(str(e)), []
+        except BaseException as e:
+            return 530, "{}".format(str(e)), []
+        return 200, "ok", result
+
+    def search_many(self, word_list):
+        try:
+            tresult = []
+            for word in word_list:
+                code, message, sresult = self.search(word, 0)
+                if code != 200:
+                    continue
+                tresult += sresult
+            uni = {}
+            for dic in tresult:
+                if dic['bid'] in uni.keys():
+                    continue
+                uni[dic['bid']] = dic
+            result = list(uni.values())
+        except SQLAlchemyError as e:
+            return 528, "{}".format(str(e)), []
+        except BaseException as e:
+            return 530, "{}".format(str(e)), []
+        return 200, "ok", result
+    '''

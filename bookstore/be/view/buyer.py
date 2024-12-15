@@ -71,3 +71,11 @@ def auto_cancel_order():
     b = Buyer()
     code, message = b.auto_cancel_order(user_id, order_id)
     return jsonify({"message": message}), code
+
+# 查询历史订单路由
+@bp_buyer.route("/get_orders", methods=["POST"])
+def get_orders():
+    user_id = request.json.get("user_id")
+    b = Buyer()
+    code, result = b.get_orders(user_id)
+    return jsonify({"orders": result if code == 200 else [], "message": result if code != 200 else "ok"}), code

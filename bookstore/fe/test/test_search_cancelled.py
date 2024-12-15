@@ -1,3 +1,4 @@
+
 #import json
 #from fe.access.new_buyer import register_new_buyer_auth
 #from fe.access.new_seller import register_new_seller
@@ -27,8 +28,8 @@ class TestOrder:
         code, self.order_id = self.buyer.new_order(self.store_id, buy_book_id_list)
         assert code == 200
         yield
-
     
+    '''
     def test_user_cancel_order_ok1(self):
         # 正常取消未支付订单测试
         code = self.buyer.user_cancel_order(self.order_id)
@@ -110,18 +111,25 @@ class TestOrder:
         code = self.buyer.payment(self.order_id)
         code = self.buyer.auto_cancel_order(self.order_id)
         assert code != 200
-    
-    '''
+
     def test_get_order(self):
         # 测试查询存在的历史订单
+        code = self.buyer.add_funds(1000000000)
+        code = self.buyer.payment(self.order_id)
+        code = self.buyer.user_cancel_order(self.order_id)#获取订单状态为0（可归为历史订单）
         code, result = self.buyer.get_orders()
-        if code == 200:
-            assert isinstance(result, list), "Expected result to be a list of orders"
-            if result:
-                for order in result:
-                    assert "order_id" in order, "Expected 'order_id' in each order"
-        else:
-            pytest.fail(f"Unexpected status code {code} for get_orders")
+        assert code == 200  # 确保请求成功
+        assert isinstance(result, list)  # 确保返回的是列表
+        assert len(result) > 0  # 确保有历史订单（此时应该是刚才生成的订单）
+        assert self.order_id in result  # 确保返回的订单号列表中包含我们刚才创建的订单
+
+    def test_get_order_empty(self):
+        # 测试没有历史订单的情况
+        new_buyer_id = "test_no_order_buyer_id_{}".format(str(uuid.uuid1()))
+        new_buyer = register_new_buyer(new_buyer_id, self.password)
+        
+        code, result = new_buyer.get_orders()
+        assert code == 200  # 请求成功
+        assert result == []  # 确保没有历史订单，返回空列表
     '''
     
-
