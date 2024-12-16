@@ -6913,3 +6913,5 @@ INFO:werkzeug:127.0.0.1 - - [16/Dec/2024 00:31:18] "POST /auth/register HTTP/1.1
 INFO:werkzeug:127.0.0.1 - - [16/Dec/2024 00:31:18] "POST /auth/login HTTP/1.1" 200 -
 INFO:werkzeug:127.0.0.1 - - [16/Dec/2024 00:31:18] "POST /buyer/get_orders HTTP/1.1" 200 -
 INFO:werkzeug:127.0.0.1 - - [16/Dec/2024 00:31:18] "GET /shutdown HTTP/1.1" 200 -
+INFO:werkzeug: * Running on http://127.0.0.1:5000/ (Press CTRL+C to quit)
+INFO:werkzeug:127.0.0.1 - - [16/Dec/2024 12:43:33] "GET /shutdown HTTP/1.1" 200 -

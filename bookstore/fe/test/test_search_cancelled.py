@@ -29,7 +29,7 @@ class TestOrder:
         assert code == 200
         yield
     
-    '''
+    
     def test_user_cancel_order_ok1(self):
         # 正常取消未支付订单测试
         code = self.buyer.user_cancel_order(self.order_id)
@@ -131,5 +131,4 @@ class TestOrder:
         code, result = new_buyer.get_orders()
         assert code == 200  # 请求成功
         assert result == []  # 确保没有历史订单，返回空列表
-    '''
     

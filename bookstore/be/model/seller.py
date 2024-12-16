@@ -47,6 +47,7 @@ class Seller(db_conn.DBConn):
                 self.conn.commit()
 
             else:  # 如果书籍不存在于 book 表
+                '''
                 # 解析传入的 JSON 格式的书籍信息
                 book_info_json = json.loads(book_json_str)
                 # 提取价格
@@ -85,9 +86,6 @@ class Seller(db_conn.DBConn):
                 }
                 self.mongo['bookstore']['book_details'].insert_one(book_details)
 
-
-                self.conn.commit()
-
                 # 将书籍信息插入到 store_book 表
                 self.conn.execute(
                     text("INSERT INTO store_book (store_id, book_id, stock_level, price) "
@@ -96,6 +94,7 @@ class Seller(db_conn.DBConn):
                 )
 
                 self.conn.commit()
+                '''
 
         except SQLAlchemyError as e:
             return 528, "{}".format(str(e))
@@ -119,10 +118,10 @@ class Seller(db_conn.DBConn):
                               {'asl':add_stock_level, 'sid':store_id, 'bid':book_id})
             self.conn.commit()
         except SQLAlchemyError as e:
-            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
+            #print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
             return 528, "{}".format(str(e))
         except BaseException as e:
-            print(f"BaseException occurred: {str(e)}")  # For debugging
+            #print(f"BaseException occurred: {str(e)}")  # For debugging
             return 530, "{}".format(str(e))
         return 200, "ok"
 
@@ -136,7 +135,7 @@ class Seller(db_conn.DBConn):
             self.conn.execute(text("INSERT into user_store (store_id, user_id) VALUES (:sid, :uid)"), {'sid':store_id, 'uid':user_id})
             self.conn.commit()
         except SQLAlchemyError as e:
-            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
+            #print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
             return 528, "{}".format(str(e))
         except BaseException as e:
             # print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
