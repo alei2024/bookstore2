@@ -79,3 +79,14 @@ def get_orders():
     b = Buyer()
     code, result = b.get_orders(user_id)
     return jsonify({"orders": result if code == 200 else [], "message": result if code != 200 else "ok"}), code
+
+
+# 搜索图书路由
+@bp_buyer.route("/search_books", methods=["POST"])
+def search_books():
+    search_key = request.json.get("search_key")
+    store_id = request.json.get("store_id", None)
+    page = request.json.get("page", 1)
+    b = Buyer()
+    code, message, books = b.search_books(search_key, store_id, page)
+    return jsonify({"books": books if code == 200 else [], "message": message}), code

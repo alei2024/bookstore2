@@ -78,3 +78,20 @@ class Buyer:
         headers = {"token": self.token}
         r = requests.post(url, headers=headers, json=json)
         return r.status_code, r.json().get("orders", [])
+
+    def search_books(self, search_key: str, store_id: str = None, page: int = 1) -> (int, str, list):
+        url = urljoin(self.url_prefix, "search_books")
+        headers = {"token": self.token}
+        json = {
+            "search_key": search_key,
+            "store_id": store_id,
+            "page": page,
+        }
+        try:
+            r = requests.post(url, headers=headers, json=json)
+            response_json = r.json()
+            books = response_json.get("books", [])
+            message = response_json.get("message", "")
+            return r.status_code, message, books
+        except requests.RequestException as e:
+            return 500, f"Request error: {str(e)}", []

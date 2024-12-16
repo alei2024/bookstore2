@@ -10,11 +10,14 @@ from be.model.times import get_time_stamp
 #from be.model.order import Order
 from be.model.encrypt import encrypt
 from datetime import datetime,timedelta,timezone
+from sqlalchemy import create_engine, text
+from pymongo import MongoClient
 
 class Buyer(db_conn.DBConn):
     def __init__(self):
         db_conn.DBConn.__init__(self)
         self.page_size = 3
+        
 
     # 用户下单；减少库存
     def new_order(self, user_id: str, store_id: str, id_and_count: [(str, int)]) -> (int, str, str):
@@ -365,100 +368,71 @@ class Buyer(db_conn.DBConn):
         except BaseException as e:
             return 530, "{}".format(str(e))
 
-        
-    
-    '''
-    def search_in_store(self, store_id, search_key, page=0):
-        try:
-            if not self.store_id_exist(store_id):
-                return error.error_non_exist_store_id(store_id)
-            if page > 0:
-                page_lower = self.page_size * (page - 1)
-                cursor = self.conn.execute(
-                    "SELECT i.book_id, i.book_title, i.book_author, s.price, s.stock_level "
-                    "from invert_index i, store s "
-                    "where i.search_key = '%s' and i.book_id = s.book_id and s.store_id = '%s' "
-                    "ORDER BY i.search_id limit '%d' offset '%d' ;"
-                    % (search_key, store_id, self.page_size, page_lower))
-            else:
-                cursor = self.conn.execute(
-                    "SELECT i.book_id, i.book_title, i.book_author, s.price, s.stock_level "
-                    "from invert_index i, store s "
-                    "where i.search_key = '%s' and i.book_id = s.book_id and s.store_id = '%s' "
-                    "ORDER BY i.search_id ;"
-                    % (search_key, store_id))
-            rows = cursor.fetchall()
 
-            result = []
-            for row in rows:
-                book = {
-                    "bid": row[0],
+
+    def search_books(self, search_key, store_id=None, page=1):
+        try:
+            # 计算分页偏移量
+            offset = (page - 1) * self.page_size
+
+            # 处理搜索关键词（去掉不必要的空格或特殊字符）
+            search_key = search_key.strip()
+
+            # 基础 PostgreSQL 查询
+            base_query = """
+                SELECT id, title, tags 
+                FROM book 
+                WHERE search_vector @@ to_tsquery(:search_key)
+            """
+
+            if store_id:
+                base_query += " AND id IN (SELECT book_id FROM store_book WHERE store_id = :store_id)"
+            base_query += " ORDER BY id LIMIT :limit OFFSET :offset"
+
+            # 执行 PostgreSQL 查询
+            with self.conn as conn:
+                result = conn.execute(
+                    text(base_query),
+                    {
+                        "search_key": search_key,
+                        "store_id": store_id,
+                        "limit": self.page_size,
+                        "offset": offset,
+                    },
+                ).fetchall()
+
+            print(search_key)
+            
+            # 整理 PostgreSQL 查询结果
+            books = [
+                {
+                    "id": row[0],
                     "title": row[1],
-                    "author": row[2],
-                    "price": row[3],
-                    "storage": row[4]
+                    "tags": row[2],
                 }
-                result.append(book)
+                for row in result
+            ]
 
-            self.conn.commit()
+            # 从 MongoDB 查询书籍详细信息
+            book_ids = [book["id"] for book in books]
+            mongo_details = list(self.mongo.book_details.find({"book_id": {"$in": book_ids}}, {"_id": 0}))
+
+            # 合并 PostgreSQL 和 MongoDB 的结果
+            for book in books:
+                details = next((item for item in mongo_details if item["book_id"] == book["id"]), {})
+                book.update(details)
+            
+            return 200, "ok", books
+
         except SQLAlchemyError as e:
-            return 528, "{}".format(str(e)), []
-        except BaseException as e:
-            return 530, "{}".format(str(e)), []
-        return 200, "ok", result
+            print(f"SQLAlchemyError occurred: {str(e)}")  # For debugging
+            #error_details = format_Sexc()  # 获取完整的堆栈信息
+            logging.error(f"PostgreSQL Error: {str(e)}\nDetails: {error_details}")
+            return 528, f"PostgreSQL Error: {str(e)}", []
+        except PyMongoError as e:
+            logging.error(f"MongoDB Error: {str(e)}")
+            return 529, f"MongoDB Error: {str(e)}", []
+        except Exception as e:
+            logging.error(f"Unknown Error: {str(e)}")
+            return 530, f"Unknown Error: {str(e)}", []
 
-    
-    
-    def search(self, search_key, page=0) -> (int, str, list):
-        try:
-            if page > 0:
-                page_lower = self.page_size * (page - 1)
-                cursor = self.conn.execute(
-                    "SELECT book_id, book_title, book_author from invert_index "
-                    "where search_key = '%s' "
-                    "ORDER BY search_id limit '%d' offset '%d';"
-                    % (search_key, self.page_size, page_lower))
-            else:
-                cursor = self.conn.execute(
-                    "SELECT book_id, book_title, book_author from invert_index "
-                    "where search_key = '%s' "
-                    "ORDER BY search_id  ;"
-                    % (search_key))
-            rows = cursor.fetchall()
-
-            result = []
-            for row in rows:
-                book = {
-                    "bid": row[0],
-                    "title": row[1],
-                    "author": row[2]
-                }
-                result.append(book)
-
-            self.conn.commit()
-        except SQLAlchemyError as e:
-            return 528, "{}".format(str(e)), []
-        except BaseException as e:
-            return 530, "{}".format(str(e)), []
-        return 200, "ok", result
-
-    def search_many(self, word_list):
-        try:
-            tresult = []
-            for word in word_list:
-                code, message, sresult = self.search(word, 0)
-                if code != 200:
-                    continue
-                tresult += sresult
-            uni = {}
-            for dic in tresult:
-                if dic['bid'] in uni.keys():
-                    continue
-                uni[dic['bid']] = dic
-            result = list(uni.values())
-        except SQLAlchemyError as e:
-            return 528, "{}".format(str(e)), []
-        except BaseException as e:
-            return 530, "{}".format(str(e)), []
-        return 200, "ok", result
-    '''
