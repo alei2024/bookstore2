@@ -51,7 +51,7 @@ class TestSearchBooks:
             assert search_key in book["title"]
 
     def test_search_pagination(self):
-        # 分页搜索图书
+        # 搜索结果分页
         search_key = ""
         code, message, books_page_1 = self.buyer.search_books(search_key, None, page=1)
         code, message, books_page_2 = self.buyer.search_books(search_key, None, page=2)

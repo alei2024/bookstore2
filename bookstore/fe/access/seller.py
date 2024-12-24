@@ -25,6 +25,7 @@ class Seller:
         r = requests.post(url, headers=headers, json=json)
         return r.status_code
 
+
     def add_book(self, store_id: str, stock_level: int, book_info: book.Book) -> int:
         json = {
             "user_id": self.seller_id,
